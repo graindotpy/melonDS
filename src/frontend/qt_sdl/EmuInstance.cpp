@@ -131,6 +131,7 @@ EmuInstance::EmuInstance(int inst) : deleting(false),
 
     net.RegisterInstance(instanceID);
 
+    localAPI = new LocalAPIServer(instanceID);
     emuThread = new EmuThread(this);
 
     numWindows = 0;
@@ -142,6 +143,9 @@ EmuInstance::EmuInstance(int inst) : deleting(false),
     createWindow();
 
     emuThread->start();
+
+    if (globalCfg.GetBool("LocalAPI.Enabled"))
+        setLocalAPIEnabled(true);
 
     // if any extra windows were saved as enabled, open them
     for (int i = 1; i < kMaxWindows; i++)
@@ -162,6 +166,9 @@ EmuInstance::~EmuInstance()
     emuThread->wait();
     delete emuThread;
     emuThread = nullptr;
+
+    delete localAPI;
+    localAPI = nullptr;
 
     net.UnregisterInstance(instanceID);
 
@@ -342,6 +349,26 @@ void EmuInstance::osdAddMessage(unsigned int color, const char* fmt, ...)
     }
 }
 
+
+bool EmuInstance::setLocalAPIEnabled(bool enable)
+{
+    globalCfg.SetBool("LocalAPI.Enabled", enable);
+
+    if (!enable)
+    {
+        localAPI->stop();
+        return true;
+    }
+
+    // Each instance gets its own port, counting up from the configured one
+    int port = globalCfg.GetInt("LocalAPI.Port") + instanceID;
+    QString origins = QString::fromStdString(globalCfg.GetString("LocalAPI.AllowedOrigins"));
+    if (localAPI->start(port, origins))
+        return true;
+
+    osdAddMessage(0xFFA0A0, "Local API: port %d is in use", port);
+    return false;
+}
 
 bool EmuInstance::emuIsActive()
 {
