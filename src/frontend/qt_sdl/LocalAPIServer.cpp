@@ -18,6 +18,8 @@
 
 #include <string.h>
 
+#include <algorithm>
+
 #include <QJsonDocument>
 #include <QJsonObject>
 #include <QUrl>
@@ -171,15 +173,13 @@ void LocalAPIServer::processBuffer(QTcpSocket* socket)
         Client& client = clients[socket];
 
         int end = client.buffer.indexOf("\r\n\r\n");
-        if (end < 0)
+        if (end > kMaxHeaderBytes || (end < 0 && client.buffer.size() > kMaxHeaderBytes))
         {
-            if (client.buffer.size() > kMaxHeaderBytes)
-            {
-                client.keepAlive = false;
-                sendError(socket, 431, "Request headers too large");
-            }
+            client.keepAlive = false;
+            sendError(socket, 431, "Request headers too large");
             return;
         }
+        if (end < 0) return;
 
         QByteArray head = client.buffer.left(end);
         client.buffer.remove(0, end + 4);
@@ -194,11 +194,15 @@ void LocalAPIServer::processBuffer(QTcpSocket* socket)
         }
 
         QHash<QByteArray, QByteArray> headers;
+        bool duplicateLength = false;
         for (const QByteArray& line : lines)
         {
             int colon = line.indexOf(':');
             if (colon <= 0) continue;
-            headers.insert(line.left(colon).trimmed().toLower(), line.mid(colon + 1).trimmed());
+            QByteArray name = line.left(colon).trimmed().toLower();
+            if (name == "content-length" && headers.contains(name))
+                duplicateLength = true;
+            headers.insert(name, line.mid(colon + 1).trimmed());
         }
 
         QByteArray connection = headers.value("connection").toLower();
@@ -207,8 +211,13 @@ void LocalAPIServer::processBuffer(QTcpSocket* socket)
         else
             client.keepAlive = connection != "close";
 
-        // Only bodiless requests are supported.
-        if (headers.value("content-length", "0").toLongLong() != 0 || headers.contains("transfer-encoding"))
+        // Only bodiless requests are supported. Anything that could carry a
+        // body is refused so its bytes are never read as another request.
+        QByteArray length = headers.value("content-length", "0");
+        bool lengthIsZero = !duplicateLength && !length.isEmpty()
+            && std::all_of(length.begin(), length.end(), [](char c) { return c >= '0' && c <= '9'; })
+            && length.toULongLong() == 0;
+        if (!lengthIsZero || headers.contains("transfer-encoding"))
         {
             client.keepAlive = false;
             sendError(socket, 400, "Request bodies are not supported");
@@ -379,7 +388,12 @@ bool LocalAPIServer::parseRanges(const QString& spec, std::vector<Range>& out, Q
             if (addrStr.startsWith("0x", Qt::CaseInsensitive))
                 addrStr = addrStr.mid(2);
             addr = addrStr.toUInt(&okAddr, 16);
-            len = fields[1].toUInt(&okLen, 0);
+
+            QString lenStr = fields[1];
+            if (lenStr.startsWith("0x", Qt::CaseInsensitive))
+                len = lenStr.mid(2).toUInt(&okLen, 16);
+            else
+                len = lenStr.toUInt(&okLen, 10);
         }
 
         if (!okAddr || !okLen || len == 0)

@@ -352,22 +352,22 @@ void EmuInstance::osdAddMessage(unsigned int color, const char* fmt, ...)
 
 bool EmuInstance::setLocalAPIEnabled(bool enable)
 {
-    globalCfg.SetBool("LocalAPI.Enabled", enable);
-
     if (!enable)
     {
         localAPI->stop();
+        globalCfg.SetBool("LocalAPI.Enabled", false);
         return true;
     }
 
     // Each instance gets its own port, counting up from the configured one
     int port = globalCfg.GetInt("LocalAPI.Port") + instanceID;
     QString origins = QString::fromStdString(globalCfg.GetString("LocalAPI.AllowedOrigins"));
-    if (localAPI->start(port, origins))
-        return true;
+    bool started = localAPI->start(port, origins);
+    globalCfg.SetBool("LocalAPI.Enabled", started);
 
-    osdAddMessage(0xFFA0A0, "Local API: port %d is in use", port);
-    return false;
+    if (!started)
+        osdAddMessage(0xFFA0A0, "Local API: port %d is in use", port);
+    return started;
 }
 
 bool EmuInstance::emuIsActive()
