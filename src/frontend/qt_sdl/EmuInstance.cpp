@@ -139,13 +139,16 @@ EmuInstance::EmuInstance(int inst) : deleting(false),
     for (int i = 0; i < kMaxWindows; i++)
         windowList[i] = nullptr;
 
+    // Before the window, so its menu shows whether the server is up. A busy
+    // port here doesn't clear the saved setting, since another instance
+    // may be using it.
+    if (globalCfg.GetBool("LocalAPI.Enabled"))
+        setLocalAPIEnabled(true, false);
+
     if (inst == 0) topWindow = nullptr;
     createWindow();
 
     emuThread->start();
-
-    if (globalCfg.GetBool("LocalAPI.Enabled"))
-        setLocalAPIEnabled(true);
 
     // if any extra windows were saved as enabled, open them
     for (int i = 1; i < kMaxWindows; i++)
@@ -350,12 +353,12 @@ void EmuInstance::osdAddMessage(unsigned int color, const char* fmt, ...)
 }
 
 
-bool EmuInstance::setLocalAPIEnabled(bool enable)
+bool EmuInstance::setLocalAPIEnabled(bool enable, bool save)
 {
     if (!enable)
     {
         localAPI->stop();
-        globalCfg.SetBool("LocalAPI.Enabled", false);
+        if (save) globalCfg.SetBool("LocalAPI.Enabled", false);
         return true;
     }
 
@@ -363,7 +366,7 @@ bool EmuInstance::setLocalAPIEnabled(bool enable)
     int port = globalCfg.GetInt("LocalAPI.Port") + instanceID;
     QString origins = QString::fromStdString(globalCfg.GetString("LocalAPI.AllowedOrigins"));
     bool started = localAPI->start(port, origins);
-    globalCfg.SetBool("LocalAPI.Enabled", started);
+    if (save) globalCfg.SetBool("LocalAPI.Enabled", started);
 
     if (!started)
         osdAddMessage(0xFFA0A0, "Local API: port %d is in use", port);

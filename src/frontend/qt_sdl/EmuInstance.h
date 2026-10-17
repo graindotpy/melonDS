@@ -135,7 +135,7 @@ public:
     melonDS::ARCodeFile* getCheatFile();
 
     bool localAPIEnabled() { return localAPI->isListening(); }
-    bool setLocalAPIEnabled(bool enable);
+    bool setLocalAPIEnabled(bool enable, bool save = true);
 
     void romIcon(const melonDS::u8 (&data)[512],
                  const melonDS::u16 (&palette)[16],
