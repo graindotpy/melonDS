@@ -144,7 +144,17 @@ void LocalAPIServer::onReadyRead()
     auto socket = qobject_cast<QTcpSocket*>(sender());
     if (!socket || !clients.contains(socket)) return;
 
-    clients[socket].buffer += socket->readAll();
+    Client& client = clients[socket];
+    client.buffer += socket->readAll();
+
+    // While a request is with the emu thread nothing is parsed, so cap what a
+    // pipelining client can queue up behind it
+    if (client.pendingJob != 0 && client.buffer.size() > kMaxHeaderBytes)
+    {
+        socket->abort();
+        return;
+    }
+
     processBuffer(socket);
 }
 
