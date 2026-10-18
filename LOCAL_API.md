@@ -41,12 +41,14 @@ value to pass to `/changes`:
 
 `GET /changes?since=SEQ` returns the logged changes after `SEQ`, oldest first,
 up to 256 at a time. `data` is the watched ranges' bytes back to back, in hex.
-The first change after a new watch is the starting value. Pass the last `seq`
-you got as the next `since`. `more` is true when there are more to fetch, and
-`missed` is true when changes after `since` have already dropped out of the log.
+The first change after a new watch is the starting value. Pass `next` (the
+last `seq` returned, or your `since` when nothing was) as the next `since`;
+`seq` at the top level is the newest change in the whole log. `more` is true
+when there are more to fetch, and `missed` is true when changes after `since`
+have already dropped out of the log. Turning the server off drops the watch.
 
 ```json
-{"watch":1,"seq":43,"frame":5200,"missed":false,"more":false,
+{"watch":1,"seq":43,"next":43,"frame":5200,"missed":false,"more":false,
  "changes":[{"seq":42,"frame":5120,"data":"0b000000"},{"seq":43,"frame":5188,"data":"00000000"}]}
 ```
 

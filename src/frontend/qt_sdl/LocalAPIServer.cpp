@@ -120,6 +120,7 @@ void LocalAPIServer::stop()
     pendingJobs.clear();
     doneJobs.clear();
     hasPending = false;
+    dropWatch = true;
 }
 
 void LocalAPIServer::onNewConnection()
@@ -458,6 +459,13 @@ bool LocalAPIServer::parseRanges(const QString& spec, std::vector<Range>& out, Q
 
 void LocalAPIServer::service(NDS* nds, bool active, bool running)
 {
+    if (dropWatch.exchange(false))
+    {
+        watchRanges.clear();
+        watchLast.clear();
+        changes.clear();
+    }
+
     if (!watchRanges.empty())
         sampleWatch(active ? nds : nullptr);
 
@@ -519,6 +527,7 @@ QByteArray LocalAPIServer::changesBody(u64 since, NDS* nds) const
 {
     QJsonArray list;
     bool more = false;
+    u64 next = since;
     for (const Change& change : changes)
     {
         if (change.seq <= since) continue;
@@ -533,11 +542,13 @@ QByteArray LocalAPIServer::changesBody(u64 since, NDS* nds) const
         entry["frame"] = (qint64)change.frame;
         entry["data"] = QString::fromLatin1(change.data.toHex());
         list.append(entry);
+        next = change.seq;
     }
 
     QJsonObject obj;
     obj["watch"] = (qint64)watchID;
     obj["seq"] = (qint64)(nextSeq - 1);
+    obj["next"] = (qint64)next;
     obj["frame"] = (qint64)(nds ? nds->NumFrames : 0);
     // Older changes than the client asked for were dropped from the log
     obj["missed"] = !changes.empty() && changes.front().seq > since + 1;

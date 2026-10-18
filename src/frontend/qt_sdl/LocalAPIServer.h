@@ -147,6 +147,8 @@ private:
     std::vector<Job> pendingJobs;
     std::vector<Job> doneJobs;
     std::atomic<bool> hasPending {false};
+    // Set by stop() so the emu thread drops the watch the next time round
+    std::atomic<bool> dropWatch {false};
 
     // Watched ranges and their change log, only touched on the emu thread.
     // Each frame where the bytes differ from the frame before is logged, so a
