@@ -30,8 +30,9 @@ It returns 503 when nothing is running.
 `GET /watch?ranges=ADDR:LEN[,ADDR:LEN...]` starts recording those ranges (up
 to 1 KiB in total) on every frame. Whenever their bytes differ from the frame
 before, the frame and the new bytes are added to a log of the last 4096
-changes. A new watch replaces the old one and clears the log; `/watch` with no
-ranges stops watching. It returns JSON with the watch's id and the `since`
+changes. A watch with different ranges replaces the old one and clears the log, while
+asking for the same ranges again keeps it and returns a `since` that covers all
+of it. `/watch` with no ranges stops watching. It returns JSON with the watch's id and the `since`
 value to pass to `/changes`:
 
 ```json

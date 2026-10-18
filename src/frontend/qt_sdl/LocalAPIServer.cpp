@@ -556,18 +556,32 @@ void LocalAPIServer::runJob(Job& job, NDS* nds, bool active, bool running)
         for (const Range& range : job.ranges)
             total += range.len;
 
-        watchRanges = job.ranges;
-        watchID++;
-        watchLast.clear();
-        changes.clear();
-        u64 since = nextSeq - 1;
+        // Asking for the same ranges again (say, from a second browser tab)
+        // keeps the log, and hands back all of it
+        bool same = !job.ranges.empty() && job.ranges.size() == watchRanges.size()
+            && std::equal(job.ranges.begin(), job.ranges.end(), watchRanges.begin(),
+                          [](const Range& a, const Range& b) { return a.addr == b.addr && a.len == b.len; });
 
-        // Log this frame's bytes right away as the starting point
-        if (!watchRanges.empty())
-            sampleWatch(active ? nds : nullptr);
+        u64 since;
+        if (same)
+        {
+            since = changes.empty() ? nextSeq - 1 : changes.front().seq - 1;
+        }
+        else
+        {
+            watchRanges = job.ranges;
+            watchID++;
+            watchLast.clear();
+            changes.clear();
+            since = nextSeq - 1;
 
-        Platform::Log(Platform::LogLevel::Info, "Local API: watching %d ranges (%u bytes)\n",
-                      (int)watchRanges.size(), total);
+            // Log this frame's bytes right away as the starting point
+            if (!watchRanges.empty())
+                sampleWatch(active ? nds : nullptr);
+
+            Platform::Log(Platform::LogLevel::Info, "Local API: watching %d ranges (%u bytes)\n",
+                          (int)watchRanges.size(), total);
+        }
 
         QJsonObject obj;
         obj["watch"] = (qint64)watchID;
