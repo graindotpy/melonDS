@@ -27,6 +27,34 @@ fall inside main RAM, `0x02000000` to `0x02FFFFFF`. `LEN` is decimal, or hex
 with a `0x` prefix. A request can ask for up to 64 ranges and 64 KiB in total.
 It returns 503 when nothing is running.
 
+`GET /watch?ranges=ADDR:LEN[,ADDR:LEN...]` starts recording those ranges (up
+to 1 KiB in total) on every frame. Whenever their bytes differ from the frame
+before, the frame and the new bytes are added to a log of the last 4096
+changes. A new watch replaces the old one and clears the log; `/watch` with no
+ranges stops watching. It returns JSON with the watch's id and the `since`
+value to pass to `/changes`:
+
+```json
+{"watch":1,"since":41,"ranges":3,"bytes":24}
+```
+
+`GET /changes?since=SEQ` returns the logged changes after `SEQ`, oldest first,
+up to 256 at a time. `data` is the watched ranges' bytes back to back, in hex.
+The first change after a new watch is the starting value. Pass the last `seq`
+you got as the next `since`. `more` is true when there are more to fetch, and
+`missed` is true when changes after `since` have already dropped out of the log.
+
+```json
+{"watch":1,"seq":43,"frame":5200,"missed":false,"more":false,
+ "changes":[{"seq":42,"frame":5120,"data":"0b000000"},{"seq":43,"frame":5188,"data":"00000000"}]}
+```
+
+Watching lets a tool that polls a few times a second still see values that
+only lasted a frame or two, such as a Pokémon's HP hitting zero just before
+the next one is sent out on fast-forward.
+
+`/status` reports `"api":2` when these two endpoints are available.
+
 Every response carries an `X-Melonds-Frame` header with the frame the data was
 read on. Reads happen between frames on the emulation thread, so all the ranges
 in one request come from the same frame.

@@ -27,6 +27,7 @@
 #include <QStringList>
 
 #include <atomic>
+#include <deque>
 #include <vector>
 
 #include "types.h"
@@ -42,6 +43,8 @@ class NDS;
 //
 //   GET /status                          -> JSON: game code, title, frame
 //   GET /read?ranges=ADDR:LEN[,ADDR:LEN] -> the bytes of each range, back to back
+//   GET /watch?ranges=ADDR:LEN[,...]     -> start recording those ranges every frame
+//   GET /changes?since=SEQ               -> JSON: each frame where the watched bytes changed
 //
 // ADDR is hex (0x optional) and must be in main RAM (0x02000000-0x02FFFFFF).
 // LEN is decimal, or hex with 0x. At most kMaxReadBytes are returned per request.
@@ -52,6 +55,9 @@ class LocalAPIServer : public QObject
 public:
     static constexpr int kDefaultPort = 31124;
     static constexpr melonDS::u32 kMaxReadBytes = 0x10000;
+    static constexpr melonDS::u32 kMaxWatchBytes = 0x400;
+    static constexpr size_t kMaxChanges = 4096;
+    static constexpr size_t kMaxChangesPerResponse = 256;
 
     explicit LocalAPIServer(int instanceID, QObject* parent = nullptr);
     ~LocalAPIServer() override;
@@ -85,6 +91,8 @@ private:
     {
         job_Status,
         job_Read,
+        job_Watch,
+        job_Changes,
     };
 
     struct Job
@@ -92,6 +100,7 @@ private:
         quint64 id;
         JobKind kind;
         std::vector<Range> ranges;
+        melonDS::u64 since = 0;
 
         // filled in on the emu thread
         int status = 200;
@@ -118,9 +127,12 @@ private:
     bool hostAllowed(const QByteArray& host) const;
     bool originAllowed(const QByteArray& origin) const;
     QByteArray corsHeadersFor(const QByteArray& origin) const;
-    static bool parseRanges(const QString& spec, std::vector<Range>& out, QString& error);
+    static bool parseRanges(const QString& spec, std::vector<Range>& out, QString& error,
+                            melonDS::u32 maxBytes = kMaxReadBytes);
 
     void runJob(Job& job, melonDS::NDS* nds, bool active, bool running);
+    void sampleWatch(melonDS::NDS* nds);
+    QByteArray changesBody(melonDS::u64 since, melonDS::NDS* nds) const;
 
     int instanceID;
     QTcpServer server;
@@ -135,6 +147,24 @@ private:
     std::vector<Job> pendingJobs;
     std::vector<Job> doneJobs;
     std::atomic<bool> hasPending {false};
+
+    // Watched ranges and their change log, only touched on the emu thread.
+    // Each frame where the bytes differ from the frame before is logged, so a
+    // client polling now and then still sees every value they went through.
+    struct Change
+    {
+        melonDS::u64 seq;
+        melonDS::u32 frame;
+        QByteArray data;
+    };
+
+    std::vector<Range> watchRanges;
+    melonDS::u32 watchID = 0;
+    QByteArray watchLast;
+    melonDS::u32 watchLastFrame = 0;
+    melonDS::NDS* watchNDS = nullptr;
+    std::deque<Change> changes;
+    melonDS::u64 nextSeq = 1;
 };
 
 #endif // LOCALAPISERVER_H
