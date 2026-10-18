@@ -442,6 +442,8 @@ void EmuThread::run()
             emuInstance->drawScreen();
         }
 
+        emuInstance->localAPI->service(emuInstance->nds, emuActive, emuStatus == emuStatus_Running);
+
         handleMessages();
     }
 }

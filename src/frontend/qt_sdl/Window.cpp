@@ -623,6 +623,12 @@ MainWindow::MainWindow(int id, EmuInstance* inst, QWidget* parent) :
             actAudioSync = menu->addAction("Audio sync");
             actAudioSync->setCheckable(true);
             connect(actAudioSync, &QAction::triggered, this, &MainWindow::onChangeAudioSync);
+
+            menu->addSeparator();
+
+            actLocalAPI = menu->addAction("Local data server");
+            actLocalAPI->setCheckable(true);
+            connect(actLocalAPI, &QAction::triggered, this, &MainWindow::onChangeLocalAPI);
         }
         {
             QMenu * menu = menubar->addMenu("Help");
@@ -732,6 +738,7 @@ MainWindow::MainWindow(int id, EmuInstance* inst, QWidget* parent) :
 
         actLimitFramerate->setChecked(emuInstance->doLimitFPS);
         actAudioSync->setChecked(emuInstance->doAudioSync);
+        actLocalAPI->setChecked(emuInstance->localAPIEnabled());
 
         if (emuInstance->instanceID > 0)
         {
@@ -2122,6 +2129,15 @@ void MainWindow::onChangeAudioSync(bool checked)
 {
     emuInstance->doAudioSync = checked;
     globalCfg.SetBool("AudioSync", emuInstance->doAudioSync);
+}
+
+void MainWindow::onChangeLocalAPI(bool checked)
+{
+    bool enabled = emuInstance->setLocalAPIEnabled(checked) && checked;
+    emuInstance->doOnAllWindows([=](MainWindow* win)
+    {
+        win->actLocalAPI->setChecked(enabled);
+    });
 }
 
 

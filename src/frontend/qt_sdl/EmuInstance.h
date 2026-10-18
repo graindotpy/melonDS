@@ -28,6 +28,7 @@
 #include "Window.h"
 #include "Config.h"
 #include "SaveManager.h"
+#include "LocalAPIServer.h"
 
 const int kMaxWindows = 4;
 
@@ -132,6 +133,9 @@ public:
 
     void enableCheats(bool enable);
     melonDS::ARCodeFile* getCheatFile();
+
+    bool localAPIEnabled() { return localAPI->isListening(); }
+    bool setLocalAPIEnabled(bool enable, bool save = true);
 
     void romIcon(const melonDS::u8 (&data)[512],
                  const melonDS::u16 (&palette)[16],
@@ -266,6 +270,7 @@ private:
     int instanceID;
 
     EmuThread* emuThread;
+    LocalAPIServer* localAPI;
 
     MainWindow* mainWindow;
     MainWindow* windowList[kMaxWindows];

@@ -72,6 +72,7 @@ DefaultList<int> DefaultInts =
     {"Instance*.Gdb.ARM9.Port", 3333},
 #endif
     {"LAN.HostNumPlayers", 16},
+    {"LocalAPI.Port", LocalAPIServer::kDefaultPort},
 };
 
 RangeList IntRanges =
@@ -118,7 +119,8 @@ DefaultList<std::string> DefaultStrings =
 {
     {"DLDI.ImagePath",                  "dldi.bin"},
     {"DSi.SD.ImagePath",                "dsisd.bin"},
-    {"Instance*.Firmware.Username",     "melonDS"}
+    {"Instance*.Firmware.Username",     "melonDS"},
+    {"LocalAPI.AllowedOrigins",         "*"},
 };
 
 DefaultList<double> DefaultDoubles =
