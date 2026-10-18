@@ -30,9 +30,10 @@ It returns 503 when nothing is running.
 `GET /watch?ranges=ADDR:LEN[,ADDR:LEN...]` starts recording those ranges (up
 to 1 KiB in total) on every frame. Whenever their bytes differ from the frame
 before, the frame and the new bytes are added to a log of the last 4096
-changes. A watch with different ranges replaces the old one and clears the log, while
-asking for the same ranges again keeps it and returns a `since` that covers all
-of it. `/watch` with no ranges stops watching. It returns JSON with the watch's id and the `since`
+changes. A watch with different ranges replaces the old one and clears the log, and
+the first change after it is the starting value. Asking for the same ranges
+again keeps the log for anyone already reading it and returns a `since` of the
+newest change, so the new reader starts from now. `/watch` with no ranges stops watching. It returns JSON with the watch's id and the `since`
 value to pass to `/changes`:
 
 ```json
@@ -41,7 +42,7 @@ value to pass to `/changes`:
 
 `GET /changes?since=SEQ` returns the logged changes after `SEQ`, oldest first,
 up to 256 at a time. `data` is the watched ranges' bytes back to back, in hex.
-The first change after a new watch is the starting value. Pass `next` (the
+Pass `next` (the
 last `seq` returned, or your `since` when nothing was) as the next `since`;
 `seq` at the top level is the newest change in the whole log. `more` is true
 when there are more to fetch, and `missed` is true when changes after `since`
