@@ -20,6 +20,7 @@
 
 #include <algorithm>
 
+#include <QJsonArray>
 #include <QJsonDocument>
 #include <QJsonObject>
 #include <QUrl>
@@ -119,6 +120,7 @@ void LocalAPIServer::stop()
     pendingJobs.clear();
     doneJobs.clear();
     hasPending = false;
+    dropWatch = true;
 }
 
 void LocalAPIServer::onNewConnection()
@@ -300,6 +302,31 @@ void LocalAPIServer::handleRequest(QTcpSocket* socket, const QByteArray& method,
         }
         job.kind = job_Read;
     }
+    else if (path == "/watch")
+    {
+        // No ranges stops watching
+        QString error;
+        QString spec = QUrlQuery(url).queryItemValue("ranges");
+        if (!spec.isEmpty() && !parseRanges(spec, job.ranges, error, kMaxWatchBytes))
+        {
+            sendError(socket, 400, error.toUtf8().constData());
+            return;
+        }
+        job.kind = job_Watch;
+    }
+    else if (path == "/changes")
+    {
+        QString since = QUrlQuery(url).queryItemValue("since");
+        bool ok = true;
+        if (!since.isEmpty())
+            job.since = since.toULongLong(&ok, 10);
+        if (!ok)
+        {
+            sendError(socket, 400, "Bad since, expected a sequence number");
+            return;
+        }
+        job.kind = job_Changes;
+    }
     else
     {
         sendError(socket, 404, "Unknown endpoint");
@@ -371,7 +398,7 @@ QByteArray LocalAPIServer::corsHeadersFor(const QByteArray& origin) const
     return headers;
 }
 
-bool LocalAPIServer::parseRanges(const QString& spec, std::vector<Range>& out, QString& error)
+bool LocalAPIServer::parseRanges(const QString& spec, std::vector<Range>& out, QString& error, u32 maxBytes)
 {
     if (spec.isEmpty())
     {
@@ -418,9 +445,9 @@ bool LocalAPIServer::parseRanges(const QString& spec, std::vector<Range>& out, Q
         }
 
         total += len;
-        if (total > kMaxReadBytes)
+        if (total > maxBytes)
         {
-            error = QString("At most %1 bytes per request").arg(kMaxReadBytes);
+            error = QString("At most %1 bytes per request").arg(maxBytes);
             return false;
         }
 
@@ -432,6 +459,16 @@ bool LocalAPIServer::parseRanges(const QString& spec, std::vector<Range>& out, Q
 
 void LocalAPIServer::service(NDS* nds, bool active, bool running)
 {
+    if (dropWatch.exchange(false))
+    {
+        watchRanges.clear();
+        watchLast.clear();
+        changes.clear();
+    }
+
+    if (!watchRanges.empty())
+        sampleWatch(active ? nds : nullptr);
+
     if (!hasPending.load()) return;
 
     std::vector<Job> jobs;
@@ -452,14 +489,128 @@ void LocalAPIServer::service(NDS* nds, bool active, bool running)
     emit jobsDone();
 }
 
+void LocalAPIServer::sampleWatch(NDS* nds)
+{
+    // A different console means the last frame's bytes no longer apply
+    if (nds != watchNDS)
+    {
+        watchNDS = nds;
+        watchLast.clear();
+    }
+    if (!nds) return;
+
+    // Called every loop iteration, including while paused; sample each frame once
+    if (!watchLast.isEmpty() && nds->NumFrames == watchLastFrame) return;
+    watchLastFrame = nds->NumFrames;
+
+    u32 total = 0;
+    for (const Range& range : watchRanges)
+        total += range.len;
+
+    QByteArray data(total, 0);
+    char* dst = data.data();
+    for (const Range& range : watchRanges)
+    {
+        for (u32 i = 0; i < range.len; i++)
+            *dst++ = nds->MainRAM[(range.addr + i) & nds->MainRAMMask];
+    }
+
+    if (data == watchLast) return;
+    watchLast = data;
+
+    changes.push_back({nextSeq++, nds->NumFrames, data});
+    if (changes.size() > kMaxChanges)
+        changes.pop_front();
+}
+
+QByteArray LocalAPIServer::changesBody(u64 since, NDS* nds) const
+{
+    QJsonArray list;
+    bool more = false;
+    u64 next = since;
+    for (const Change& change : changes)
+    {
+        if (change.seq <= since) continue;
+        if ((size_t)list.size() >= kMaxChangesPerResponse)
+        {
+            more = true;
+            break;
+        }
+
+        QJsonObject entry;
+        entry["seq"] = (qint64)change.seq;
+        entry["frame"] = (qint64)change.frame;
+        entry["data"] = QString::fromLatin1(change.data.toHex());
+        list.append(entry);
+        next = change.seq;
+    }
+
+    QJsonObject obj;
+    obj["watch"] = (qint64)watchID;
+    obj["seq"] = (qint64)(nextSeq - 1);
+    obj["next"] = (qint64)next;
+    obj["frame"] = (qint64)(nds ? nds->NumFrames : 0);
+    // Older changes than the client asked for were dropped from the log
+    obj["missed"] = !changes.empty() && changes.front().seq > since + 1;
+    obj["more"] = more;
+    obj["changes"] = list;
+    return QJsonDocument(obj).toJson(QJsonDocument::Compact);
+}
+
 void LocalAPIServer::runJob(Job& job, NDS* nds, bool active, bool running)
 {
     job.frame = nds ? nds->NumFrames : 0;
 
+    if (job.kind == job_Watch)
+    {
+        u32 total = 0;
+        for (const Range& range : job.ranges)
+            total += range.len;
+
+        // Asking for the same ranges again (say, from a second browser tab or
+        // a reloaded page) keeps the log for whoever is already reading it.
+        // The newcomer starts from now, so it never replays what it didn't see.
+        bool same = !job.ranges.empty() && job.ranges.size() == watchRanges.size()
+            && std::equal(job.ranges.begin(), job.ranges.end(), watchRanges.begin(),
+                          [](const Range& a, const Range& b) { return a.addr == b.addr && a.len == b.len; });
+
+        u64 since = nextSeq - 1;
+        if (!same)
+        {
+            watchRanges = job.ranges;
+            watchID++;
+            watchLast.clear();
+            changes.clear();
+
+            // Log this frame's bytes right away as the starting point
+            if (!watchRanges.empty())
+                sampleWatch(active ? nds : nullptr);
+
+            Platform::Log(Platform::LogLevel::Info, "Local API: watching %d ranges (%u bytes)\n",
+                          (int)watchRanges.size(), total);
+        }
+
+        QJsonObject obj;
+        obj["watch"] = (qint64)watchID;
+        obj["since"] = (qint64)since;
+        obj["ranges"] = (int)watchRanges.size();
+        obj["bytes"] = (qint64)total;
+        job.contentType = "application/json";
+        job.body = QJsonDocument(obj).toJson(QJsonDocument::Compact);
+        return;
+    }
+
+    if (job.kind == job_Changes)
+    {
+        job.contentType = "application/json";
+        job.body = changesBody(job.since, nds);
+        return;
+    }
+
     if (job.kind == job_Status)
     {
         QJsonObject obj;
-        obj["api"] = 1;
+        obj["api"] = 2;
         obj["instance"] = instanceID;
         obj["active"] = active;
         obj["running"] = running;
