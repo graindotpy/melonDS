@@ -477,6 +477,7 @@ void EmuThread::run()
             // paused
             nframes = 0;
             lastFrameStart = 0;
+            emuInstance->perf.pause();
             lastTime = SDL_GetPerformanceCounter() * perfCountsSec;
             lastMeasureTime = lastTime;
 

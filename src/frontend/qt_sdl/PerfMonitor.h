@@ -68,6 +68,8 @@ public:
     void addFrame(const Frame& frame, double now);
     void setSettings(const Settings& s) { settings = s; }
     void reset();
+    // Drops the second in progress, so time spent paused isn't counted
+    void pause() { cur = Second(); }
 
     // The last whole second, for the window title
     QString titleSuffix() const;
