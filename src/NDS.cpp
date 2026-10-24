@@ -456,7 +456,7 @@ void NDS::Reset()
     }
     else
     {
-        ARM9ClockShift = 1;
+        ARM9ClockShift = ARM9Overclock ? 2 : 1;
         MainRAMMask = 0x3FFFFF;
     }
     // has to be called before InitTimings
@@ -714,6 +714,23 @@ bool NDS::DoSavestate(Savestate* file)
     file->Var64(&SysTimestamp);
     file->Var64(&LastSysClockCycles);
     file->Var64(&FrameStartTimestamp);
+    if (!file->Saving && ConsoleType == 0)
+    {
+        // The ARM9's timestamps count its own cycles, so a savestate made
+        // with the overclock set the other way counts them at the other rate.
+        // Whichever rate lines up with the system clock is the one it used.
+        auto off = [&](u32 shift)
+        {
+            u64 t = ARM9Timestamp >> shift;
+            return t > SysTimestamp ? t - SysTimestamp : SysTimestamp - t;
+        };
+        u32 shift = off(1) <= off(2) ? 1 : 2;
+        if (shift != ARM9ClockShift)
+        {
+            ARM9Timestamp = (ARM9Timestamp >> shift) << ARM9ClockShift;
+            ARM9Target    = (ARM9Target    >> shift) << ARM9ClockShift;
+        }
+    }
     file->Var32(&NumFrames);
     file->Var32(&NumLagFrames);
     file->Bool32(&LagFrameFlag);
@@ -1220,6 +1237,22 @@ bool NDS::IsLidClosed() const
 {
     if (KeyInput & (1<<23)) return true;
     return false;
+}
+
+void NDS::SetARM9Overclock(bool enable)
+{
+    ARM9Overclock = enable;
+    if (ConsoleType != 0) return;
+
+    u32 shift = enable ? 2 : 1;
+    if (shift == ARM9ClockShift) return;
+
+    ARM9Timestamp = (ARM9Timestamp >> ARM9ClockShift) << shift;
+    ARM9Target    = (ARM9Target    >> ARM9ClockShift) << shift;
+    ARM9ClockShift = shift;
+    ARM9.UpdateRegionTimings(0x00000, 0x100000);
+    // Compiled code may have the old cycle counts built in
+    JIT.ResetBlockCache();
 }
 
 void NDS::SetLidClosed(bool closed)

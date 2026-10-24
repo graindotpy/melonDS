@@ -2495,6 +2495,7 @@ void GPU3D::VBlank() noexcept
             NumOpaquePolygons = 0;
 
             FlushRequest = 0;
+            FlushCount++;
         }
     }
 }

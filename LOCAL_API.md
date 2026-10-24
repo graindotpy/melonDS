@@ -59,6 +59,40 @@ the next one is sent out on fast-forward.
 
 `/status` reports `"api":2` when these two endpoints are available.
 
+`GET /perf` returns how well emulation kept up over the last ten minutes, one
+entry per second, newest last, along with the settings that affect speed.
+`/status` reports `"api":3` when it's available.
+
+```json
+{"settings":{"jit":true,"renderer":"software","threaded3D":true,"limitFPS":true,
+  "audioSync":false,"overclock":false,"console":"ds"},
+ "seconds":[{"time":"2026-10-24T16:50:17Z","frame":487,"fps":60,"game":50,
+  "frames3D":50,"cpu":99.8,"cpuMax":100,"emuMs":3.7,"emuMaxMs":6.4,"drawMs":0.4,
+  "slowestMs":19.7,"fastForward":0,"overclock":false}]}
+```
+
+| Field | Meaning |
+| --- | --- |
+| `fps` | Frames emulated that second; 60 is full speed |
+| `game` | % of those frames where the game read the buttons, which it does once per update |
+| `frames3D` | % of frames where the game finished a 3D frame |
+| `cpu`, `cpuMax` | How busy the DS's main CPU (ARM9) was, on average and in its busiest frame |
+| `emuMs`, `emuMaxMs` | PC time to emulate a frame, on average and at most; 16.7 is a whole frame at 60fps |
+| `drawMs` | PC time to draw a frame |
+| `slowestMs` | Longest gap between two frames, waiting included |
+| `fastForward` | % of frames run on fast-forward |
+
+`fps` under 60 with high `emuMs` means the PC can't keep up. `fps` at 60 with
+`game` at 50 and `cpu` near 100 means the game itself is slowing down: the DS's
+CPU can't finish an update in one frame, so the game updates every other frame,
+as it would on a real DS. The window title shows `game` and `cpu` for the last
+second.
+
+**Config → Overclock DS CPU** runs the DS's ARM9 at 133MHz, the DSi's speed,
+instead of 67MHz, which removes that kind of slowdown. It's saved as
+`DSOverclock` under `[Emu]`. Savestates load whichever way it's set, but one
+saved with it on won't load properly in a melonDS build without it.
+
 Every response carries an `X-Melonds-Frame` header with the frame the data was
 read on. Reads happen between frames on the emulation thread, so all the ranges
 in one request come from the same frame.

@@ -315,6 +315,8 @@ public:
     u32 RenderNumPolygons = 0;
 
     u32 FlushRequest = 0;
+    // 3D frames the game finished, for the frontend's performance stats
+    u32 FlushCount = 0;
     u32 FlushAttributes = 0;
 };
 

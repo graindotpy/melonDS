@@ -120,6 +120,7 @@ EmuInstance::EmuInstance(int inst) : deleting(false),
     else slowmoFPS = val;
 
     doAudioSync = globalCfg.GetBool("AudioSync");
+    doARM9Overclock = globalCfg.GetBool("Emu.DSOverclock");
 
     mpAudioMode = globalCfg.GetInt("MP.AudioMode");
 
@@ -132,6 +133,7 @@ EmuInstance::EmuInstance(int inst) : deleting(false),
     net.RegisterInstance(instanceID);
 
     localAPI = new LocalAPIServer(instanceID);
+    localAPI->setPerfMonitor(&perf);
     emuThread = new EmuThread(this);
 
     numWindows = 0;

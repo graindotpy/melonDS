@@ -272,6 +272,10 @@ public: // TODO: Encapsulate the rest of these members
     u32 NumLagFrames;
     bool LagFrameFlag;
 
+    // ARM9 cycles spent halted or in an idle loop, for the frontend's
+    // performance stats. Not kept in savestates.
+    u64 ARM9IdleCycles = 0;
+
     // no need to worry about those overflowing, they can keep going for atleast 4350 years
     u64 ARM9Timestamp, ARM9Target;
     u64 ARM7Timestamp, ARM7Target;
@@ -424,6 +428,12 @@ public: // TODO: Encapsulate the rest of these members
     bool IsLidClosed() const;
     void SetLidClosed(bool closed);
 
+    // Runs the DS's ARM9 at 133MHz, as on a DSi, instead of 67MHz. Games that
+    // slow down because the ARM9 can't keep up then run at full speed.
+    // Only applies to DS mode.
+    void SetARM9Overclock(bool enable);
+    bool GetARM9Overclock() const { return ARM9Overclock; }
+
     void RegisterEventFuncs(u32 id, void* that, const EventFuncList& funcs);
     void UnregisterEventFuncs(u32 id);
     void ScheduleEvent(u32 id, bool periodic, s32 delay, u32 funcid, u32 param);
@@ -507,6 +517,7 @@ public: // TODO: Encapsulate the rest of these members
 
 protected:
     void InitTimings();
+    bool ARM9Overclock = false;
     u32 SchedListMask;
     u64 SysTimestamp;
     u8 WRAMCnt;
