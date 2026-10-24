@@ -199,6 +199,7 @@ private:
 
     bool useOpenGL;
     int videoRenderer;
+    bool threaded3D = false;
     bool videoSettingsDirty;
 };
 

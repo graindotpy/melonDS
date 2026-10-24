@@ -143,7 +143,8 @@ void EmuThread::run()
     u32 winUpdateCount = 0, winUpdateFreq = 1;
     u8 dsiVolumeLevel = 0x1F;
 
-    char melontitle[100];
+    char melontitle[160];
+    double lastFrameStart = 0;
 
     bool fastforward = false;
     bool slowmo = false;
@@ -244,6 +245,7 @@ void EmuThread::run()
                 {
                     videoRenderer = 0;
                 }
+                threaded3D = globalCfg.GetBool("3D.Soft.Threaded");
 
                 updateRenderer();
 
@@ -300,16 +302,29 @@ void EmuThread::run()
 
 
             // emulate
+            NDS* nds = emuInstance->nds;
+            if (nds->GetARM9Overclock() != emuInstance->doARM9Overclock)
+                nds->SetARM9Overclock(emuInstance->doARM9Overclock);
+
+            u64 idleBefore = nds->ARM9IdleCycles;
+            u64 gxStallBefore = nds->ARM9GXStallCycles;
+            u64 dmaBefore = nds->ARM9DMACycles;
+            u32 flushesBefore = nds->GPU.GPU3D.FlushCount;
+            double frameStart = SDL_GetPerformanceCounter() * perfCountsSec;
+            bool measured = false;
+
             u32 nlines;
-            if (emuInstance->nds->GPU.GetRenderer().NeedsShaderCompile())
+            if (nds->GPU.GetRenderer().NeedsShaderCompile())
             {
                 compileShaders();
                 nlines = 1;
             }
             else
             {
-                nlines = emuInstance->nds->RunFrame();
+                nlines = nds->RunFrame();
+                measured = true;
             }
+            double emuEnd = SDL_GetPerformanceCounter() * perfCountsSec;
 
             if (emuInstance->ndsSave)
                 emuInstance->ndsSave->CheckFlush();
@@ -321,6 +336,37 @@ void EmuThread::run()
                 emuInstance->firmwareSave->CheckFlush();
 
             emuInstance->drawScreen();
+
+            if (measured)
+            {
+                double drawEnd = SDL_GetPerformanceCounter() * perfCountsSec;
+                PerfMonitor::Frame frame;
+                frame.number = nds->NumFrames;
+                frame.emuMs = (emuEnd - frameStart) * 1000.0;
+                frame.drawMs = (drawEnd - emuEnd) * 1000.0;
+                frame.loopMs = lastFrameStart > 0 ? (frameStart - lastFrameStart) * 1000.0 : 0;
+                frame.input = !nds->LagFrameFlag;
+                frame.flushed = nds->GPU.GPU3D.FlushCount != flushesBefore;
+                // A whole frame is 263 lines of 2130 system cycles each
+                frame.arm9Cycles = ((u64)nlines * 2130) << nds->ARM9ClockShift;
+                frame.arm9Idle = nds->ARM9IdleCycles - idleBefore;
+                frame.arm9GXStall = nds->ARM9GXStallCycles - gxStallBefore;
+                frame.arm9DMA = nds->ARM9DMACycles - dmaBefore;
+                frame.fastForward = fastforward;
+                frame.slowMo = slowmo;
+
+                PerfMonitor::Settings settings;
+                settings.jit = nds->IsJITEnabled();
+                settings.renderer = videoRenderer;
+                settings.threaded3D = threaded3D;
+                settings.limitFPS = emuInstance->doLimitFPS;
+                settings.audioSync = emuInstance->doAudioSync;
+                settings.overclock = nds->GetARM9Overclock();
+                settings.consoleType = nds->ConsoleType;
+                emuInstance->perf.setSettings(settings);
+                emuInstance->perf.addFrame(frame, drawEnd);
+            }
+            lastFrameStart = measured ? frameStart : 0;
 
 #ifdef MELONCAP
             MelonCap::Update();
@@ -421,7 +467,8 @@ void EmuThread::run()
                     winUpdateFreq = 1;
                     
                 double actualfps = (59.8261 * 263.0) / nlines;
-                snprintf(melontitle, sizeof(melontitle), "[%d/%.0f] melonDS " MELONDS_VERSION, fps, actualfps);
+                snprintf(melontitle, sizeof(melontitle), "[%d/%.0f] melonDS " MELONDS_VERSION "%s", fps, actualfps,
+                         emuInstance->perf.titleSuffix().toUtf8().constData());
                 changeWindowTitle(melontitle);
             }
         }
@@ -429,6 +476,8 @@ void EmuThread::run()
         {
             // paused
             nframes = 0;
+            lastFrameStart = 0;
+            emuInstance->perf.pause();
             lastTime = SDL_GetPerformanceCounter() * perfCountsSec;
             lastMeasureTime = lastTime;
 

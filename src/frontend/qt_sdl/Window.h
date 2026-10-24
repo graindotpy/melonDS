@@ -173,6 +173,7 @@ private slots:
     void onChangeLimitFramerate(bool checked);
     void onChangeAudioSync(bool checked);
     void onChangeLocalAPI(bool checked);
+    void onChangeDSOverclock(bool checked);
 
     void onTitleUpdate(QString title);
 
@@ -296,6 +297,7 @@ public:
     QAction* actLimitFramerate;
     QAction* actAudioSync;
     QAction* actLocalAPI;
+    QAction* actDSOverclock;
 
     QAction* actAbout;
 };

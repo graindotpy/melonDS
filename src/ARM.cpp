@@ -609,6 +609,8 @@ void ARMv5::Execute()
         }
         else
         {
+            if (NDS.ARM9Timestamp < NDS.ARM9Target)
+                NDS.ARM9IdleCycles += NDS.ARM9Target - NDS.ARM9Timestamp;
             NDS.ARM9Timestamp = NDS.ARM9Target;
             return;
         }
@@ -647,6 +649,7 @@ void ARMv5::Execute()
                     if ((Halted == 1 || IdleLoop) && NDS.ARM9Timestamp < NDS.ARM9Target)
                     {
                         Cycles = 0;
+                        NDS.ARM9IdleCycles += NDS.ARM9Target - NDS.ARM9Timestamp;
                         NDS.ARM9Timestamp = NDS.ARM9Target;
                     }
                     IdleLoop = 0;
@@ -703,6 +706,7 @@ void ARMv5::Execute()
             {
                 if (Halted == 1 && NDS.ARM9Timestamp < NDS.ARM9Target)
                 {
+                    NDS.ARM9IdleCycles += NDS.ARM9Target - NDS.ARM9Timestamp;
                     NDS.ARM9Timestamp = NDS.ARM9Target;
                 }
                 break;

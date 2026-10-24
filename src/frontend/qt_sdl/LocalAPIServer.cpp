@@ -28,6 +28,7 @@
 
 #include "LocalAPIServer.h"
 #include "NDS.h"
+#include "PerfMonitor.h"
 #include "Platform.h"
 
 using namespace melonDS;
@@ -313,6 +314,10 @@ void LocalAPIServer::handleRequest(QTcpSocket* socket, const QByteArray& method,
             return;
         }
         job.kind = job_Watch;
+    }
+    else if (path == "/perf")
+    {
+        job.kind = job_Perf;
     }
     else if (path == "/changes")
     {
@@ -607,10 +612,17 @@ void LocalAPIServer::runJob(Job& job, NDS* nds, bool active, bool running)
         return;
     }
 
+    if (job.kind == job_Perf)
+    {
+        job.contentType = "application/json";
+        job.body = perf ? perf->json() : errorBody("No performance stats");
+        return;
+    }
+
     if (job.kind == job_Status)
     {
         QJsonObject obj;
-        obj["api"] = 2;
+        obj["api"] = 3;
         obj["instance"] = instanceID;
         obj["active"] = active;
         obj["running"] = running;

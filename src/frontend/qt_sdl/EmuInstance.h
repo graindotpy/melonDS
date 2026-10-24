@@ -21,6 +21,8 @@
 
 #include <SDL2/SDL.h>
 
+#include <atomic>
+
 #include "Platform.h"
 #include "main.h"
 #include "NDS.h"
@@ -28,7 +30,9 @@
 #include "Window.h"
 #include "Config.h"
 #include "SaveManager.h"
+
 #include "LocalAPIServer.h"
+#include "PerfMonitor.h"
 
 const int kMaxWindows = 4;
 
@@ -310,6 +314,9 @@ public:
     bool fastForwardToggled;
     bool slowmoToggled;
     bool doAudioSync;
+    // Runs the DS's ARM9 at the DSi's speed; picked up by the emu thread
+    std::atomic<bool> doARM9Overclock {false};
+    PerfMonitor perf;
 private:
 
     std::unique_ptr<melonDS::Savestate> backupState;

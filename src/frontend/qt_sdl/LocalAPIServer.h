@@ -36,6 +36,7 @@ namespace melonDS
 {
 class NDS;
 }
+class PerfMonitor;
 
 // Read-only HTTP API on 127.0.0.1 so local tools (such as a run tracker in a
 // browser) can read emulated memory. The server lives on the GUI thread; memory
@@ -45,6 +46,7 @@ class NDS;
 //   GET /read?ranges=ADDR:LEN[,ADDR:LEN] -> the bytes of each range, back to back
 //   GET /watch?ranges=ADDR:LEN[,...]     -> start recording those ranges every frame
 //   GET /changes?since=SEQ               -> JSON: each frame where the watched bytes changed
+//   GET /perf                            -> JSON: how well emulation kept up, second by second
 //
 // ADDR is hex (0x optional) and must be in main RAM (0x02000000-0x02FFFFFF).
 // LEN is decimal, or hex with 0x. At most kMaxReadBytes are returned per request.
@@ -71,6 +73,9 @@ public:
     // Emu thread, once per loop iteration.
     void service(melonDS::NDS* nds, bool active, bool running);
 
+    // Before start(). Read on the emu thread, where it's kept up to date.
+    void setPerfMonitor(PerfMonitor* monitor) { perf = monitor; }
+
 signals:
     void jobsDone();
 
@@ -93,6 +98,7 @@ private:
         job_Read,
         job_Watch,
         job_Changes,
+        job_Perf,
     };
 
     struct Job
@@ -135,6 +141,7 @@ private:
     QByteArray changesBody(melonDS::u64 since, melonDS::NDS* nds) const;
 
     int instanceID;
+    PerfMonitor* perf = nullptr;
     QTcpServer server;
     QStringList origins;
     bool anyOrigin = false;

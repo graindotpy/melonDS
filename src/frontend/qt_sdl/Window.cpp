@@ -629,6 +629,10 @@ MainWindow::MainWindow(int id, EmuInstance* inst, QWidget* parent) :
             actLocalAPI = menu->addAction("Local data server");
             actLocalAPI->setCheckable(true);
             connect(actLocalAPI, &QAction::triggered, this, &MainWindow::onChangeLocalAPI);
+
+            actDSOverclock = menu->addAction("Overclock DS CPU (less in-game slowdown)");
+            actDSOverclock->setCheckable(true);
+            connect(actDSOverclock, &QAction::triggered, this, &MainWindow::onChangeDSOverclock);
         }
         {
             QMenu * menu = menubar->addMenu("Help");
@@ -739,6 +743,7 @@ MainWindow::MainWindow(int id, EmuInstance* inst, QWidget* parent) :
         actLimitFramerate->setChecked(emuInstance->doLimitFPS);
         actAudioSync->setChecked(emuInstance->doAudioSync);
         actLocalAPI->setChecked(emuInstance->localAPIEnabled());
+        actDSOverclock->setChecked(emuInstance->doARM9Overclock);
 
         if (emuInstance->instanceID > 0)
         {
@@ -2140,6 +2145,16 @@ void MainWindow::onChangeLocalAPI(bool checked)
     });
 }
 
+
+void MainWindow::onChangeDSOverclock(bool checked)
+{
+    emuInstance->doARM9Overclock = checked;
+    globalCfg.SetBool("Emu.DSOverclock", checked);
+    emuInstance->doOnAllWindows([=](MainWindow* win)
+    {
+        win->actDSOverclock->setChecked(checked);
+    });
+}
 
 void MainWindow::onTitleUpdate(QString title)
 {
