@@ -47,7 +47,9 @@ public:
         bool input;              // the game read the buttons
         bool flushed;            // the game finished a 3D frame
         melonDS::u64 arm9Cycles; // ARM9 cycles in the frame
-        melonDS::u64 arm9Idle;   // of which it spent halted
+        melonDS::u64 arm9Idle;   // of which it spent halted or asleep
+        melonDS::u64 arm9GXStall; // stalled on a full geometry FIFO
+        melonDS::u64 arm9DMA;    // held up by DMA
         bool fastForward;
         bool slowMo;
     };
@@ -87,7 +89,7 @@ private:
         double emuMs = 0, emuMaxMs = 0;
         double drawMs = 0;
         double slowestMs = 0;
-        melonDS::u64 arm9Cycles = 0, arm9Idle = 0;
+        melonDS::u64 arm9Cycles = 0, arm9Idle = 0, arm9GXStall = 0, arm9DMA = 0;
         double cpuMax = 0;
         bool overclock = false;
     };

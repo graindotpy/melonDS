@@ -966,6 +966,8 @@ u32 NDS::RunFrame()
                 if (target > frametarget)
                     target = frametarget;
 
+                if ((target << ARM9ClockShift) > ARM9Timestamp)
+                    ARM9IdleCycles += (target << ARM9ClockShift) - ARM9Timestamp;
                 ARM9Timestamp = target << ARM9ClockShift;
                 ARM7Timestamp = target;
                 TimerTimestamp[0] = target;
@@ -1005,10 +1007,14 @@ u32 NDS::RunFrame()
                     // GXFIFO stall
                     s32 cycles = GPU.GPU3D.CyclesToRunFor();
 
+                    u64 before = ARM9Timestamp;
                     ARM9Timestamp = std::min(ARM9Target, ARM9Timestamp+(cycles<<ARM9ClockShift));
+                    if (ARM9Timestamp > before)
+                        ARM9GXStallCycles += ARM9Timestamp - before;
                 }
                 else if (CPUStop & CPUStop_DMA9)
                 {
+                    u64 before = ARM9Timestamp;
                     DMAs[0].Run();
                     if (!(CPUStop & CPUStop_GXStall)) DMAs[1].Run();
                     if (!(CPUStop & CPUStop_GXStall)) DMAs[2].Run();
@@ -1018,6 +1024,8 @@ u32 NDS::RunFrame()
                         auto& dsi = dynamic_cast<melonDS::DSi&>(*this);
                         dsi.RunNDMAs(0);
                     }
+                    if (ARM9Timestamp > before)
+                        ARM9DMACycles += ARM9Timestamp - before;
                 }
                 else
                 {
@@ -1251,7 +1259,9 @@ void NDS::SetARM9Overclock(bool enable)
     ARM9Target    = (ARM9Target    >> ARM9ClockShift) << shift;
     ARM9ClockShift = shift;
     ARM9.UpdateRegionTimings(0x00000, 0x100000);
-    // Compiled code may have the old cycle counts built in
+    // Compiled code may have the old cycle counts built in. Like JIT.Reset(),
+    // the code memory has to be writable first.
+    JIT.JitEnableWrite();
     JIT.ResetBlockCache();
 }
 

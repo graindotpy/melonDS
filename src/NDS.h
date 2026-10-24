@@ -272,9 +272,12 @@ public: // TODO: Encapsulate the rest of these members
     u32 NumLagFrames;
     bool LagFrameFlag;
 
-    // ARM9 cycles spent halted or in an idle loop, for the frontend's
-    // performance stats. Not kept in savestates.
+    // Where the ARM9's cycles went, for the frontend's performance stats:
+    // halted, in an idle loop or asleep; stalled on a full geometry FIFO; and
+    // held up by DMA. Not kept in savestates.
     u64 ARM9IdleCycles = 0;
+    u64 ARM9GXStallCycles = 0;
+    u64 ARM9DMACycles = 0;
 
     // no need to worry about those overflowing, they can keep going for atleast 4350 years
     u64 ARM9Timestamp, ARM9Target;

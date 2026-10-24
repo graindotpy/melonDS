@@ -307,6 +307,8 @@ void EmuThread::run()
                 nds->SetARM9Overclock(emuInstance->doARM9Overclock);
 
             u64 idleBefore = nds->ARM9IdleCycles;
+            u64 gxStallBefore = nds->ARM9GXStallCycles;
+            u64 dmaBefore = nds->ARM9DMACycles;
             u32 flushesBefore = nds->GPU.GPU3D.FlushCount;
             double frameStart = SDL_GetPerformanceCounter() * perfCountsSec;
             bool measured = false;
@@ -347,7 +349,9 @@ void EmuThread::run()
                 frame.flushed = nds->GPU.GPU3D.FlushCount != flushesBefore;
                 // A whole frame is 263 lines of 2130 system cycles each
                 frame.arm9Cycles = ((u64)nlines * 2130) << nds->ARM9ClockShift;
-                frame.arm9Idle = std::min(nds->ARM9IdleCycles - idleBefore, frame.arm9Cycles);
+                frame.arm9Idle = nds->ARM9IdleCycles - idleBefore;
+                frame.arm9GXStall = nds->ARM9GXStallCycles - gxStallBefore;
+                frame.arm9DMA = nds->ARM9DMACycles - dmaBefore;
                 frame.fastForward = fastforward;
                 frame.slowMo = slowmo;
 
